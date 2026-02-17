@@ -51,13 +51,17 @@ const action = [
   { id: 9, title: "I", posterUrl: "https://image.tmdb.org/t/p/w500/1g0dhYtq4irTY1GPXvft6k4YLjm.jpg", description: "A thrilling adventure.", releaseDate: "2022-01-01", rating: 7.8, genres: ["Action", "Adventure"], director: "Jane Doe", cast: ["Actor 1", "Actor 2"], runtime: 120, language: "English" }
 ];
 
-// Helper: paginate array (returns IDs only)
+// Helper: paginate array (returns minimal movie data: id, title, posterUrl)
 function paginate(array, page = 1, pageSize = 5) {
   const totalPages = Math.ceil(array.length / pageSize);
   const start = (page - 1) * pageSize;
   const end = start + pageSize;
   return {
-    ids: array.slice(start, end).map(m => m.id),
+    movies: array.slice(start, end).map(m => ({
+      id: m.id,
+      title: m.title,
+      posterUrl: m.posterUrl,
+    })),
     page,
     totalPages,
   };

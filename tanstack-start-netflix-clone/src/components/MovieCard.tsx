@@ -3,15 +3,54 @@ import type { Movie } from "../types";
 import { useState, useRef } from "react";
 
 const TMDB_IMAGES_ASSET_URL = "https://image.tmdb.org/t/p/w500/";
+const API_BASE = "http://localhost:3001";
 
-const MovieCard = ({ movie }: { movie: Movie }) => {
+// Minimal movie data from list endpoints
+type MinimalMovie = Pick<Movie, 'id' | 'title' | 'posterUrl'>;
+
+// Frontend cache for movie details (shared across all MovieCard instances)
+const movieDetailsCache = new Map<number, Movie>();
+
+const MovieCard = ({ movie }: { movie: MinimalMovie }) => {
     const [isHovered, setIsHovered] = useState(false);
+    const [movieDetails, setMovieDetails] = useState<Movie | null>(() => 
+        movieDetailsCache.get(movie.id) || null
+    );
+    const [isLoading, setIsLoading] = useState(false);
     const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const cardRef = useRef<HTMLDivElement>(null);
+
+    const fetchMovieDetails = async (movieId: number) => {
+        // Check cache first
+        const cached = movieDetailsCache.get(movieId);
+        if (cached) {
+            setMovieDetails(cached);
+            return;
+        }
+        
+        try {
+            setIsLoading(true);
+            const res = await fetch(`${API_BASE}/api/movies/${movieId}`);
+            if (res.ok) {
+                const data = await res.json();
+                // Store in cache
+                movieDetailsCache.set(movieId, data);
+                setMovieDetails(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch movie details:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleMouseEnter = () => {
         hoverTimeoutRef.current = setTimeout(() => {
             setIsHovered(true);
+            // Fetch details only if not already loaded
+            if (!movieDetails) {
+                fetchMovieDetails(movie.id);
+            }
         }, 500); // Delay before showing expanded card
     };
 
@@ -22,10 +61,13 @@ const MovieCard = ({ movie }: { movie: Movie }) => {
         setIsHovered(false);
     };
 
-    const posterSrc = movie?.posterUrl || (movie?.poster_path ? TMDB_IMAGES_ASSET_URL + movie?.poster_path : "/placeholder.svg");
-    const matchPercent = movie.rating ? Math.round(movie.rating * 10) : 95;
-    const year = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : 2024;
-    const duration = movie.runtime ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m` : "1h 45m";
+    const posterSrc = movie?.posterUrl || (movie && 'poster_path' in movie ? TMDB_IMAGES_ASSET_URL + (movie as Movie).poster_path : "/placeholder.svg");
+    
+    // Use fetched details if available, otherwise show defaults
+    const details = movieDetails;
+    const matchPercent = details?.rating ? Math.round(details.rating * 10) : 95;
+    const year = details?.releaseDate ? new Date(details.releaseDate).getFullYear() : 2024;
+    const duration = details?.runtime ? `${Math.floor(details.runtime / 60)}h ${details.runtime % 60}m` : "1h 45m";
 
     return (
         <div
@@ -108,21 +150,31 @@ const MovieCard = ({ movie }: { movie: Movie }) => {
 
                             {/* Meta Info */}
                             <div className="flex items-center gap-2 text-sm mb-2">
-                                <span className="text-green-500 font-semibold">{matchPercent}% Match</span>
-                                <span className="border border-zinc-500 px-1.5 py-0.5 text-xs text-zinc-400">PG-13</span>
-                                <span className="text-zinc-400">{year}</span>
-                                <span className="text-zinc-400">{duration}</span>
-                                <span className="border border-zinc-500 px-1.5 py-0.5 text-xs text-zinc-400">HD</span>
+                                {isLoading ? (
+                                    <span className="text-zinc-400">Loading...</span>
+                                ) : (
+                                    <>
+                                        <span className="text-green-500 font-semibold">{matchPercent}% Match</span>
+                                        <span className="border border-zinc-500 px-1.5 py-0.5 text-xs text-zinc-400">PG-13</span>
+                                        <span className="text-zinc-400">{year}</span>
+                                        <span className="text-zinc-400">{duration}</span>
+                                        <span className="border border-zinc-500 px-1.5 py-0.5 text-xs text-zinc-400">HD</span>
+                                    </>
+                                )}
                             </div>
 
                             {/* Genres */}
                             <div className="flex flex-wrap gap-1 text-sm text-zinc-300">
-                                {(movie.genres || ['Drama', 'Action']).slice(0, 3).map((genre, idx) => (
-                                    <span key={genre} className="flex items-center">
-                                        {idx > 0 && <span className="text-zinc-600 mx-1">•</span>}
-                                        {genre}
-                                    </span>
-                                ))}
+                                {isLoading ? (
+                                    <span className="text-zinc-500">Loading genres...</span>
+                                ) : (
+                                    (details?.genres || ['Drama', 'Action']).slice(0, 3).map((genre, idx) => (
+                                        <span key={genre} className="flex items-center">
+                                            {idx > 0 && <span className="text-zinc-600 mx-1">•</span>}
+                                            {genre}
+                                        </span>
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>

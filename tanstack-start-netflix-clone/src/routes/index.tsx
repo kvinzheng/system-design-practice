@@ -6,12 +6,12 @@ import { createServerFn } from '@tanstack/react-start';
 import { useState, useRef } from 'react'
 import type { Movie } from '../types';
 
-// SSR: Fetch all movie rows on server for instant render
+// SSR: Fetch all movie rows on server for instant render (minimal data only)
 const getHomepageRows = createServerFn()
 .handler(async () => {
   const API_BASE = 'http://localhost:3001';
   
-  // 1. Fetch IDs from all 3 category endpoints in parallel
+  // Fetch minimal movie data (id, title, posterUrl) from all 3 category endpoints
   const [trendingRes, newReleasesRes, actionRes] = await Promise.all([
     fetch(`${API_BASE}/api/movies/trending?page=1`),
     fetch(`${API_BASE}/api/movies/new-releases?page=1`),
@@ -24,38 +24,20 @@ const getHomepageRows = createServerFn()
     actionRes.json(),
   ]);
 
-  // 2. Collect unique IDs
-  const trendingIds: number[] = trendingData.ids || [];
-  const newReleasesIds: number[] = newReleasesData.ids || [];
-  const actionIds: number[] = actionData.ids || [];
-  const allIds = [...new Set([...trendingIds, ...newReleasesIds, ...actionIds])];
-
-  // 3. Batch fetch all movie details
-  const batchRes = await fetch(`${API_BASE}/api/movies/batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids: allIds }),
-  });
-  const batchData = await batchRes.json();
-  const moviesById = new Map<number, Movie>();
-  for (const movie of batchData.results || []) {
-    moviesById.set(movie.id, movie);
-  }
-
-  // 4. Distribute movies to each row
+  // Return minimal movie data directly (details fetched on hover)
   return {
     trending: {
-      movies: trendingIds.map(id => moviesById.get(id)).filter((m): m is Movie => !!m),
+      movies: trendingData.movies || [],
       page: trendingData.page,
       totalPages: trendingData.totalPages,
     },
     newReleases: {
-      movies: newReleasesIds.map(id => moviesById.get(id)).filter((m): m is Movie => !!m),
+      movies: newReleasesData.movies || [],
       page: newReleasesData.page,
       totalPages: newReleasesData.totalPages,
     },
     action: {
-      movies: actionIds.map(id => moviesById.get(id)).filter((m): m is Movie => !!m),
+      movies: actionData.movies || [],
       page: actionData.page,
       totalPages: actionData.totalPages,
     },
@@ -125,20 +107,7 @@ function App() {
       const nextPage = trendingPage + 1;
       const res = await fetch(`http://localhost:3001/api/movies/trending?page=${nextPage}`);
       const data = await res.json();
-      const ids: number[] = data.ids || [];
-      
-      // Batch fetch movie details
-      const batchRes = await fetch('http://localhost:3001/api/movies/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      });
-      const batchData = await batchRes.json();
-      const moviesById = new Map<number, Movie>();
-      for (const movie of batchData.results || []) {
-        moviesById.set(movie.id, movie);
-      }
-      const newMovies = ids.map(id => moviesById.get(id)).filter((m): m is Movie => !!m);
+      const newMovies = data.movies || [];
       
       setTrending(prev => deduplicateMovies([...prev, ...newMovies]));
       setTrendingPage(data.page);
@@ -156,20 +125,7 @@ function App() {
       const nextPage = row2Page + 1;
       const res = await fetch(`http://localhost:3001/api/movies/new-releases?page=${nextPage}`);
       const data = await res.json();
-      const ids: number[] = data.ids || [];
-      
-      // Batch fetch movie details
-      const batchRes = await fetch('http://localhost:3001/api/movies/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      });
-      const batchData = await batchRes.json();
-      const moviesById = new Map<number, Movie>();
-      for (const movie of batchData.results || []) {
-        moviesById.set(movie.id, movie);
-      }
-      const newMovies = ids.map(id => moviesById.get(id)).filter((m): m is Movie => !!m);
+      const newMovies = data.movies || [];
       
       setRow2(prev => deduplicateMovies([...prev, ...newMovies]));
       setRow2Page(data.page);
@@ -187,20 +143,7 @@ function App() {
       const nextPage = row3Page + 1;
       const res = await fetch(`http://localhost:3001/api/movies/action?page=${nextPage}`);
       const data = await res.json();
-      const ids: number[] = data.ids || [];
-      
-      // Batch fetch movie details
-      const batchRes = await fetch('http://localhost:3001/api/movies/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      });
-      const batchData = await batchRes.json();
-      const moviesById = new Map<number, Movie>();
-      for (const movie of batchData.results || []) {
-        moviesById.set(movie.id, movie);
-      }
-      const newMovies = ids.map(id => moviesById.get(id)).filter((m): m is Movie => !!m);
+      const newMovies = data.movies || [];
       
       setRow3(prev => deduplicateMovies([...prev, ...newMovies]));
       setRow3Page(data.page);
@@ -241,7 +184,7 @@ function App() {
             <div className="my-4 relative" style={{ overflow: 'visible' }} ref={trendingRowRef}>
               <div className="relative">
                 <div
-                  className="overflow-x-auto overflow-y-visible flex gap-6 pr-24 py-8"
+                  className="overflow-x-auto overflow-y-visible flex gap-6 pr-24 py-8 trending-scroll"
                   style={{ scrollBehavior: 'smooth', pointerEvents: 'auto' }}
                 >
                   {trending.map((movie) => (
